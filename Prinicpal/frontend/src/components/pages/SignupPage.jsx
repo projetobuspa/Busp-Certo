@@ -57,7 +57,15 @@ function SignupPage() {
     } catch (error) {
       //incase of error
       console.error("Error Creating User: ", error);
-      const errorMessage = error.response?.data || "Erro ao criar usuário";
+      let errorMessage = "Erro ao criar usuário";
+      
+      // Verificar se temos uma mensagem de erro do servidor
+      if (error.response) {
+        errorMessage = error.response.data || errorMessage;
+      } else if (error.request) {
+        errorMessage = "Erro de conexão com o servidor";
+      }
+      
       toast.error(errorMessage);
     }
   };

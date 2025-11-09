@@ -32,21 +32,41 @@ let pool; // initialize the database connection pool
 
 const startServer = async () => {
   try {
-    //calling the database connection function while declaring it in the pool variable
+    // Tenta conectar ao banco de dados
     pool = await DBConn();
+    console.log('Database connection established successfully');
 
-    // pass the pool to the routes
+    // Middleware para tratamento de erros de banco de dados
     app.use((req, res, next) => {
+      if (!pool) {
+        return res.status(500).json({ error: 'Database connection not available' });
+      }
       req.pool = pool;
       next();
+    });
+
+    // Middleware para tratamento de erros
+    app.use((err, req, res, next) => {
+      console.error('Error:', err);
+      res.status(500).json({ error: 'Internal server error' });
     });
 
     //declaring auth router here
     app.use("/auth", router);
 
-    //making the app run on specified port
-    app.listen(port, () => {
-      console.log(`server running on http://localhost:${port}`);
+    // Inicia o servidor
+    const server = app.listen(port, () => {
+      console.log(`Server running on http://localhost:${port}`);
+    });
+
+    // Tratamento de erros do servidor
+    server.on('error', (error) => {
+      if (error.code === 'EADDRINUSE') {
+        console.error(`Port ${port} is already in use`);
+        process.exit(1);
+      } else {
+        console.error('Server error:', error);
+      }
     });
   } catch (error) {
     console.error("Failed to start server:", error);
