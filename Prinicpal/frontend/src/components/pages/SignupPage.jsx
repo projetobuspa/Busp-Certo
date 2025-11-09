@@ -36,7 +36,7 @@ function SignupPage() {
       }
 
       //if user has filled all necessary fields send axios post request
-      const res = await axios.post("http://localhost:3000/auth/signup", {
+      const res = await axios.post("http://localhost:5000/auth/signup", {
         username: username,
         email: email,
         password: password
@@ -49,15 +49,16 @@ function SignupPage() {
         setPassword(""); //empty the field after successful signup
         //notify the client that the user has been created
         toast.success("Usuário criado com sucesso, redirecionando...");
+        
+        setTimeout(() => {
+          history.push("/login");
+        }, 3000);
       }
-
-      setTimeout(() => {
-        history.push("/login");
-      }, 3000);
     } catch (error) {
       //incase of error
       console.error("Error Creating User: ", error);
-      toast.error("Erro ao criar usuário");
+      const errorMessage = error.response?.data || "Erro ao criar usuário";
+      toast.error(errorMessage);
     }
   };
 
