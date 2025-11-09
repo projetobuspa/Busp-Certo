@@ -30,21 +30,38 @@ app.use(express.urlencoded({ extended: true }));
 
 let pool; // initialize the database connection pool
 
-(async () => {
-  //calling the database connection function while declaring it in the pool variable
-  pool = await DBConn();
+const startServer = async () => {
+  try {
+    //calling the database connection function while declaring it in the pool variable
+    pool = await DBConn();
 
-  // pass the pool to the routes
-  app.use((req, res, next) => {
-    req.pool = pool;
-    next();
-  });
+    // pass the pool to the routes
+    app.use((req, res, next) => {
+      req.pool = pool;
+      next();
+    });
 
-  //declaring  auth router here
-  app.use("/auth", router);
+    //declaring auth router here
+    app.use("/auth", router);
 
-  //making the app run on specified port
-  app.listen(port, () => {
-    console.log(`server running on http://localhost:${port}`);
-  });
-})();
+    //making the app run on specified port
+    app.listen(port, () => {
+      console.log(`server running on http://localhost:${port}`);
+    });
+  } catch (error) {
+    console.error("Failed to start server:", error);
+    process.exit(1);
+  }
+};
+
+// Handle process termination
+process.on('SIGINT', async () => {
+  if (pool && pool.raw) {
+    console.log('Closing database connection...');
+    await pool.raw.close();
+  }
+  process.exit(0);
+});
+
+// Start the server
+startServer();

@@ -1,49 +1,68 @@
-//importing the mysql2/promise for creating an async await function qith await connection and await querys
-const mysql = require("mysql2/promise");
+const path = require("path");
+const fs = require("fs");
+const sqlite3 = require("sqlite3").verbose();
+const { promisify } = require("util");
 
-//creation of the async await function which connects to database using the credentials store in key value pairs in the .env file and then runs necessary querys
 const DBConn = async () => {
   try {
-    //async await pool connection function
-    const pool = await mysql.createPool({
-      host: process.env.DB_HOST,
-      user: process.env.DB_USER,
-      password: process.env.DB_PASSWORD,
-      waitForConnections: process.env.DB_WAITFORCONNECTIONS,
-      connectionLimit: process.env.DB_CONNECTIONLIMIT,
-      queueLimit: process.env.DB_QUEUELIMIT
+    const dbFile = process.env.DB_FILE || path.join(__dirname, "..", "data", "database.sqlite");
+    const dbDir = path.dirname(dbFile);
+    if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
+
+    const db = new sqlite3.Database(dbFile, (err) => {
+      if (err) {
+        console.error('Error opening database:', err);
+        throw err;
+      }
     });
 
-    //async await create database if not exist query
-    await pool.query(
-      `CREATE DATABASE IF NOT EXISTS \`${process.env.DB_DATABASE}\``
-    );
-    console.log(`Database ${process.env.DB_DATABASE} created`);
+    // Promisify database methods
+    const runAsync = (sql, params = []) =>
+      new Promise((resolve, reject) => {
+        db.run(sql, params, function (err) {
+          if (err) {
+            console.error('Error executing query:', err);
+            return reject(err);
+          }
+          resolve({ lastID: this.lastID, changes: this.changes });
+        });
+      });
+    const allAsync = promisify(db.all.bind(db));
+    const getAsync = promisify(db.get.bind(db));
 
-    //async await query for switching to the created or if exist database
-    await pool.query(`USE \`${process.env.DB_DATABASE}\``);
-    console.log(`Switched to ${process.env.DB_DATABASE}`);
-
-    //async await create tables in database if not exists query
-    await pool.query(
-      `CREATE TABLE IF NOT EXISTS \`${process.env.DB_TABLENAME}\` (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            username VARCHAR(50) NOT NULL UNIQUE,
-            email VARCHAR(100) NOT NULL UNIQUE,
-            password VARCHAR(255) NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )`
+    const table = process.env.DB_TABLENAME || "users";
+    await runAsync(
+      "CREATE TABLE IF NOT EXISTS " + table + " (" +
+      "id INTEGER PRIMARY KEY AUTOINCREMENT," +
+      "username TEXT NOT NULL UNIQUE," +
+      "email TEXT NOT NULL UNIQUE," +
+      "password TEXT NOT NULL," +
+      "created_at DATETIME DEFAULT CURRENT_TIMESTAMP)"
     );
-    console.log(`${process.env.DB_TABLENAME} table created`);
-    
-    //returning the pool to be using in controller functions
-    return pool;
-    
+
+    const poolLike = {
+      query: async (sql, params = []) => {
+        const trimmed = sql.trim().toUpperCase();
+        if (trimmed.startsWith("SELECT")) {
+          const rows = await allAsync(sql, params);
+          return [rows];
+        } else if (trimmed.startsWith("INSERT")) {
+          const result = await runAsync(sql, params);
+          return [{ insertId: result.lastID }];
+        } else {
+          const result = await runAsync(sql, params);
+          return [{ changes: result.changes }];
+        }
+      },
+      raw: db
+    };
+
+    console.log("SQLite DB opened at " + dbFile);
+    return poolLike;
   } catch (error) {
-    //basic error handling
-    console.error("Error during database connection", error);
+    console.error("Error during SQLite DB connection", error);
+    throw error;
   }
 };
 
-//exporting the function
 module.exports = DBConn;
